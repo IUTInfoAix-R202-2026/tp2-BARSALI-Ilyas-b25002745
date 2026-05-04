@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="420" viewBox="0 0 600 420">
+  <defs>
+    <style>
+      text { font-family: 'Segoe UI', Arial, sans-serif; }
+      .title { font-size: 14px; font-weight: bold; fill: #2c3e50; }
+      .label { font-size: 12px; fill: #2c3e50; }
+      .small { font-size: 11px; fill: #555; }
+      .id-tag { font-size: 10px; fill: #7f8c8d; font-style: italic; }
+      .disabled { fill: #bdc3c7; }
+      .active { fill: #3498db; }
+      .rule { font-size: 11px; fill: #c0392b; }
+    </style>
+  </defs>
+
+  <!-- Fond -->
+  <rect width="600" height="420" rx="8" ry="8" fill="#f8f9fa" stroke="#dee2e6" stroke-width="1.5"/>
+  <text x="300" y="24" text-anchor="middle" class="title">Exercice 6 - FormulaireConnexion</text>
+
+  <!-- Etat INITIAL (gauche) -->
+  <text x="145" y="48" text-anchor="middle" class="label" fill="#7f8c8d">Etat initial</text>
+  <rect x="30" y="55" width="230" height="270" rx="6" fill="white" stroke="#bdc3c7" stroke-width="1.5"/>
+
+  <!-- userId -->
+  <text x="50" y="90" class="label">Identifiant :</text>
+  <rect x="50" y="96" width="190" height="24" rx="3" fill="white" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="245" y="85" class="id-tag">#user-id</text>
+
+  <!-- pwd (desactive) -->
+  <text x="50" y="140" class="label">Mot de passe :</text>
+  <rect x="50" y="146" width="190" height="24" rx="3" fill="#f2f3f4" stroke="#dce0e0" stroke-width="1"/>
+  <text x="145" y="163" text-anchor="middle" class="disabled">non editable</text>
+  <text x="245" y="135" class="id-tag">#pwd (PasswordField)</text>
+
+  <!-- btn-ok (desactive) -->
+  <rect x="50" y="200" width="90" height="28" rx="4" fill="#bdc3c7" stroke="#aaa" stroke-width="1"/>
+  <text x="95" y="219" text-anchor="middle" class="label" fill="white">OK</text>
+  <text x="50" y="246" class="id-tag">#btn-ok (disabled)</text>
+
+  <!-- btn-cancel (desactive) -->
+  <rect x="155" y="200" width="85" height="28" rx="4" fill="#bdc3c7" stroke="#aaa" stroke-width="1"/>
+  <text x="197" y="219" text-anchor="middle" class="label" fill="white">Annuler</text>
+  <text x="150" y="246" class="id-tag">#btn-cancel (disabled)</text>
+
+  <!-- message -->
+  <text x="50" y="278" class="small" fill="#7f8c8d">[ #message - Label vide ]</text>
+
+  <!-- Regles de validation -->
+  <rect x="30" y="330" width="230" height="80" rx="4" fill="#fff8f8" stroke="#e74c3c" stroke-width="1"/>
+  <text x="145" y="348" text-anchor="middle" class="rule">Regles de validation :</text>
+  <text x="40" y="365" class="rule">- userId.length >= 6 -> pwd editable</text>
+  <text x="40" y="381" class="rule">- pwd >= 8 chars + majusc. + chiffre</text>
+  <text x="40" y="397" class="rule">- tout OK -> bouton OK actif</text>
+
+  <!-- Etat VALIDE (droite) -->
+  <text x="450" y="48" text-anchor="middle" class="label" fill="#27ae60">Formulaire valide</text>
+  <rect x="335" y="55" width="240" height="270" rx="6" fill="white" stroke="#27ae60" stroke-width="1.5"/>
+
+  <!-- userId rempli -->
+  <text x="355" y="90" class="label">Identifiant :</text>
+  <rect x="355" y="96" width="190" height="24" rx="3" fill="white" stroke="#27ae60" stroke-width="1.5"/>
+  <text x="445" y="113" text-anchor="middle" class="label" fill="#2c3e50">utilisateur</text>
+
+  <!-- pwd rempli + editable -->
+  <text x="355" y="140" class="label">Mot de passe :</text>
+  <rect x="355" y="146" width="190" height="24" rx="3" fill="white" stroke="#27ae60" stroke-width="1.5"/>
+  <text x="445" y="163" text-anchor="middle" class="label" fill="#2c3e50">••••••••</text>
+
+  <!-- btn-ok ACTIF -->
+  <rect x="355" y="200" width="90" height="28" rx="4" fill="#27ae60" stroke="#1e8449" stroke-width="1"/>
+  <text x="400" y="219" text-anchor="middle" class="label" fill="white">OK</text>
+
+  <!-- btn-cancel ACTIF -->
+  <rect x="460" y="200" width="85" height="28" rx="4" fill="#e74c3c" stroke="#c0392b" stroke-width="1"/>
+  <text x="502" y="219" text-anchor="middle" class="label" fill="white">Annuler</text>
+
+  <!-- message apres OK -->
+  <text x="355" y="260" class="small" fill="#27ae60">Bienvenue utilisateur (********)</text>
+  <text x="355" y="275" class="id-tag">#message</text>
+
+  <!-- Fleche transition -->
+  <line x1="262" y1="190" x2="332" y2="190" stroke="#7f8c8d" stroke-width="1.5" marker-end="url(#arr)"/>
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#7f8c8d"/>
+    </marker>
+  </defs>
+  <text x="297" y="183" text-anchor="middle" class="small" fill="#7f8c8d">saisie</text>
+</svg>

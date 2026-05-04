@@ -1,0 +1,1238 @@
+# GitHub Classroom autograding workflow.
+# Le bloc autograding (steps Classroom + reporter) est régénéré par
+# update-autograding.sh en fonction des sous-paquets d'exercices
+# détectés. Ne pas éditer à la main le bloc entre marqueurs.
+name: GitHub Classroom Workflow
+
+# Le calcul de note ne tourne que sur main : un exercice n'est livré qu'au
+# moment du merge. Les pushes sur les feature branches (exerciceN) restent
+# couverts par maven.yml (compilation + tests), qui suffit pour le feedback
+# pédagogique. workflow_dispatch reste dispo pour un regrade manuel.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  build:
+    name: Autograding
+    if: github.repository != 'IUTInfoAix-R202/template-tp-javafx'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Historique complet pour que `git diff $BEFORE..HEAD` fonctionne
+          # dans le step de scope (sans ça, on tomberait sur ALL à chaque push).
+          fetch-depth: 0
+
+      - name: Set up JDK 25 with JavaFX
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'zulu'
+          java-package: 'jdk+fx'
+          cache: maven
+
+      #@@@AUTOGRADING-BEGIN@@@ (généré par update-autograding.sh, ne pas éditer à la main)
+      - name: Compilation
+        id: compilation
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: Compilation
+          setup-command: ""
+          command: ./mvnw -B -q compile
+          timeout: 5
+          max-score: 100
+
+      - name: Restaurer le cache des rapports Surefire
+        id: surefire_cache
+        uses: actions/cache/restore@v5
+        with:
+          path: target/surefire-reports
+          key: surefire-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            surefire-${{ github.ref_name }}-
+            surefire-main-
+
+      - name: Détecter les exercices impactés
+        id: scope
+        run: |
+          set +e
+          BEFORE="${{ github.event.before }}"
+          # Cache vide (premier run, expiration GHA) -> regrade complet sinon les
+          # XMLs absents donneraient un score 0 à tout le monde.
+          if [ ! -d target/surefire-reports ] || [ -z "$(ls -A target/surefire-reports 2>/dev/null)" ]; then
+            echo "filter=ALL" >> "$GITHUB_OUTPUT"
+            echo "reason=cache des rapports absent ou expiré" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Premier push sur la branche, ou commit base introuvable -> tout regrader
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "filter=ALL" >> "$GITHUB_OUTPUT"
+            echo "reason=premier push sur la branche ou commit base introuvable" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Fichiers globaux : invalident le cache (regrade complet)
+          if git diff --name-only "$BEFORE" HEAD -- \
+              pom.xml \
+              '.github/workflows/**' \
+              '*.sh' \
+              'src/main/java/fr/univ_amu/iut/App.java' \
+              'src/main/java/fr/univ_amu/iut/module-info.java' \
+              'src/test/java/fr/univ_amu/iut/AppTest.java' \
+              | grep -q .; then
+            echo "filter=ALL" >> "$GITHUB_OUTPUT"
+            echo "reason=fichier global modifié (pom.xml / App / workflows / scripts)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Détection fine : paquets exerciceN / bonusN modifiés
+          pkgs=$(git diff --name-only "$BEFORE" HEAD -- \
+              'src/main/java/fr/univ_amu/iut/exercice*/**' \
+              'src/test/java/fr/univ_amu/iut/exercice*/**' \
+              'src/main/java/fr/univ_amu/iut/bonus*/**' \
+              'src/test/java/fr/univ_amu/iut/bonus*/**' \
+              | grep -oE 'fr/univ_amu/iut/(exercice[0-9]+|bonus[0-9]+)' \
+              | sort -u | tr '/' '.')
+          if [ -z "$pkgs" ]; then
+            echo "filter=NONE" >> "$GITHUB_OUTPUT"
+            echo "reason=aucune source d'exercice modifiée (mvnw test sauté, scores restaurés du cache)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Énumère les classes de test des paquets impactés (FQCN explicites)
+          classes=""
+          for pkg in $pkgs; do
+            pkg_dir="src/test/java/$(echo "$pkg" | tr '.' '/')"
+            while IFS= read -r f; do
+              cls=$(basename "$f" .java)
+              classes="${classes}${classes:+,}${pkg}.${cls}"
+            done < <(find "$pkg_dir" -type f -name '*.java' 2>/dev/null)
+          done
+          if [ -z "$classes" ]; then
+            echo "filter=NONE" >> "$GITHUB_OUTPUT"
+            echo "reason=paquets modifiés mais aucune classe de test trouvée" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "filter=$classes" >> "$GITHUB_OUTPUT"
+          echo "reason=paquets impactés : $(echo $pkgs | tr '\\n' ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Lancer les tests impactés
+        id: run_tests
+        if: steps.scope.outputs.filter != 'NONE'
+        continue-on-error: true
+        run: |
+          echo "Scope : ${{ steps.scope.outputs.reason }}"
+          if [ "${{ steps.scope.outputs.filter }}" = "ALL" ]; then
+            xvfb-run --auto-servernum ./mvnw -B test -DfailIfNoTests=false
+          else
+            xvfb-run --auto-servernum ./mvnw -B test -Dtest='${{ steps.scope.outputs.filter }}' -DfailIfNoTests=false
+          fi
+
+
+      - name: "exercice1 : testLaProprieteExisteApresSetAnInt"
+        id: exercice1_testLaProprieteExisteApresSetAnInt
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testLaProprieteExisteApresSetAnInt"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testLaProprieteExisteApresSetAnInt
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice1 : testLaValeurInitialeEst1024"
+        id: exercice1_testLaValeurInitialeEst1024
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testLaValeurInitialeEst1024"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testLaValeurInitialeEst1024
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice1 : testCreerProprieteAfficheLeToString"
+        id: exercice1_testCreerProprieteAfficheLeToString
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testCreerProprieteAfficheLeToString"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testCreerProprieteAfficheLeToString
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice1 : testCreerProprieteAfficheGet"
+        id: exercice1_testCreerProprieteAfficheGet
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testCreerProprieteAfficheGet"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testCreerProprieteAfficheGet
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice1 : testCreerProprieteAfficheGetValue"
+        id: exercice1_testCreerProprieteAfficheGetValue
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testCreerProprieteAfficheGetValue"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testCreerProprieteAfficheGetValue
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice1 : testInvalidationListenerEstDeclenche"
+        id: exercice1_testInvalidationListenerEstDeclenche
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testInvalidationListenerEstDeclenche"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testInvalidationListenerEstDeclenche
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice1 : testInvalidationListenerPasDeclencheSiMemeValeur"
+        id: exercice1_testInvalidationListenerPasDeclencheSiMemeValeur
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testInvalidationListenerPasDeclencheSiMemeValeur"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testInvalidationListenerPasDeclencheSiMemeValeur
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice1 : testInvalidationListenerEstParesseux"
+        id: exercice1_testInvalidationListenerEstParesseux
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testInvalidationListenerEstParesseux"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testInvalidationListenerEstParesseux
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice1 : testInvalidationListenerRetireFonctionne"
+        id: exercice1_testInvalidationListenerRetireFonctionne
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testInvalidationListenerRetireFonctionne"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testInvalidationListenerRetireFonctionne
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice1 : testChangeListenerEstDeclencheAvecAncienneEtNouvelleValeur"
+        id: exercice1_testChangeListenerEstDeclencheAvecAncienneEtNouvelleValeur
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testChangeListenerEstDeclencheAvecAncienneEtNouvelleValeur"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testChangeListenerEstDeclencheAvecAncienneEtNouvelleValeur
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice1 : testChangeListenerDeclencheAChaqueMiseAJour"
+        id: exercice1_testChangeListenerDeclencheAChaqueMiseAJour
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testChangeListenerDeclencheAChaqueMiseAJour"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testChangeListenerDeclencheAChaqueMiseAJour
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice1 : testChangeListenerRetireFonctionne"
+        id: exercice1_testChangeListenerRetireFonctionne
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice1 : testChangeListenerRetireFonctionne"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice1.ProprieteSimpleTest testChangeListenerRetireFonctionne
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice2 : testBindPropageLaValeur"
+        id: exercice2_testBindPropageLaValeur
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testBindPropageLaValeur"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testBindPropageLaValeur
+          timeout: 5
+          max-score: 15
+
+      - name: "exercice2 : testLaCibleSuitLaSource"
+        id: exercice2_testLaCibleSuitLaSource
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testLaCibleSuitLaSource"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testLaCibleSuitLaSource
+          timeout: 5
+          max-score: 14
+
+      - name: "exercice2 : testUnbindArreteLaPropagation"
+        id: exercice2_testUnbindArreteLaPropagation
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testUnbindArreteLaPropagation"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testUnbindArreteLaPropagation
+          timeout: 5
+          max-score: 14
+
+      - name: "exercice2 : testIsBoundRetourneTrueSiLiee"
+        id: exercice2_testIsBoundRetourneTrueSiLiee
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testIsBoundRetourneTrueSiLiee"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testIsBoundRetourneTrueSiLiee
+          timeout: 5
+          max-score: 14
+
+      - name: "exercice2 : testAfficheValeurInitialeAvantLiaison"
+        id: exercice2_testAfficheValeurInitialeAvantLiaison
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testAfficheValeurInitialeAvantLiaison"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testAfficheValeurInitialeAvantLiaison
+          timeout: 5
+          max-score: 14
+
+      - name: "exercice2 : testLiaisonPropageLaValeurSource"
+        id: exercice2_testLiaisonPropageLaValeurSource
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testLiaisonPropageLaValeurSource"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testLiaisonPropageLaValeurSource
+          timeout: 5
+          max-score: 14
+
+      - name: "exercice2 : testChangementSourcePropageVersCible"
+        id: exercice2_testChangementSourcePropageVersCible
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testChangementSourcePropageVersCible"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testChangementSourcePropageVersCible
+          timeout: 5
+          max-score: 14
+
+      - name: "exercice2 : testApresUnbindLaCibleNeSuitPlus"
+        id: exercice2_testApresUnbindLaCibleNeSuitPlus
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice2 : testApresUnbindLaCibleNeSuitPlus"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice2.LiaisonProprietesTest testApresUnbindLaCibleNeSuitPlus
+          timeout: 5
+          max-score: 14
+
+      - name: "exercice3 : testLeTexteEstCorrect"
+        id: exercice3_testLeTexteEstCorrect
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : testLeTexteEstCorrect"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.BoutonCouleurTest testLeTexteEstCorrect
+          timeout: 5
+          max-score: 6
+
+      - name: "exercice3 : testLaCouleurEstStockee"
+        id: exercice3_testLaCouleurEstStockee
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : testLaCouleurEstStockee"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.BoutonCouleurTest testLaCouleurEstStockee
+          timeout: 5
+          max-score: 6
+
+      - name: "exercice3 : testNbClicsInitialEstZero"
+        id: exercice3_testNbClicsInitialEstZero
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : testNbClicsInitialEstZero"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.BoutonCouleurTest testNbClicsInitialEstZero
+          timeout: 5
+          max-score: 6
+
+      - name: "exercice3 : testNbClicsPropertyRetourneUnePropriete"
+        id: exercice3_testNbClicsPropertyRetourneUnePropriete
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : testNbClicsPropertyRetourneUnePropriete"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.BoutonCouleurTest testNbClicsPropertyRetourneUnePropriete
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : testClicIncrementeNbClics"
+        id: exercice3_testClicIncrementeNbClics
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : testClicIncrementeNbClics"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.BoutonCouleurTest testClicIncrementeNbClics
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : testDeuxClicsIncrementent"
+        id: exercice3_testDeuxClicsIncrementent
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : testDeuxClicsIncrementent"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.BoutonCouleurTest testDeuxClicsIncrementent
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : testLaPropertyEstLieeAuCompteur"
+        id: exercice3_testLaPropertyEstLieeAuCompteur
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : testLaPropertyEstLieeAuCompteur"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.BoutonCouleurTest testLaPropertyEstLieeAuCompteur
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : laFenetreEstVisible"
+        id: exercice3_laFenetreEstVisible
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : laFenetreEstVisible"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest laFenetreEstVisible
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : laSceneExiste"
+        id: exercice3_laSceneExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : laSceneExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest laSceneExiste
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : laRacineEstUnBorderPane"
+        id: exercice3_laRacineEstUnBorderPane
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : laRacineEstUnBorderPane"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest laRacineEstUnBorderPane
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : lesTroisBoutonsExistent"
+        id: exercice3_lesTroisBoutonsExistent
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : lesTroisBoutonsExistent"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest lesTroisBoutonsExistent
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : lesBoutonsOntUneCouleur"
+        id: exercice3_lesBoutonsOntUneCouleur
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : lesBoutonsOntUneCouleur"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest lesBoutonsOntUneCouleur
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : leHBoxDesBoutonsEstEnHaut"
+        id: exercice3_leHBoxDesBoutonsEstEnHaut
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : leHBoxDesBoutonsEstEnHaut"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest leHBoxDesBoutonsEstEnHaut
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : laZoneDeCouleurExiste"
+        id: exercice3_laZoneDeCouleurExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : laZoneDeCouleurExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest laZoneDeCouleurExiste
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : leLabelCompteursExiste"
+        id: exercice3_leLabelCompteursExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : leLabelCompteursExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest leLabelCompteursExiste
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : leTexteInitialAvantClic"
+        id: exercice3_leTexteInitialAvantClic
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : leTexteInitialAvantClic"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest leTexteInitialAvantClic
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : cliquerRougeMetLaZoneEnRouge"
+        id: exercice3_cliquerRougeMetLaZoneEnRouge
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : cliquerRougeMetLaZoneEnRouge"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest cliquerRougeMetLaZoneEnRouge
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : cliquerVertMetLaZoneEnVert"
+        id: exercice3_cliquerVertMetLaZoneEnVert
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : cliquerVertMetLaZoneEnVert"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest cliquerVertMetLaZoneEnVert
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : cliquerIncrementeLeCompteur"
+        id: exercice3_cliquerIncrementeLeCompteur
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : cliquerIncrementeLeCompteur"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest cliquerIncrementeLeCompteur
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : leTexteBasculeDeBienvenueAuxCompteurs"
+        id: exercice3_leTexteBasculeDeBienvenueAuxCompteurs
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : leTexteBasculeDeBienvenueAuxCompteurs"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest leTexteBasculeDeBienvenueAuxCompteurs
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : lesCompteursSontIndependants"
+        id: exercice3_lesCompteursSontIndependants
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : lesCompteursSontIndependants"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest lesCompteursSontIndependants
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice3 : leLabelEstLieParBinding"
+        id: exercice3_leLabelEstLieParBinding
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice3 : leLabelEstLieParBinding"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice3.PaletteReactiveTest leLabelEstLieParBinding
+          timeout: 5
+          max-score: 5
+
+      - name: "exercice4 : testLesProprietesSontInitialiseesAZero"
+        id: exercice4_testLesProprietesSontInitialiseesAZero
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testLesProprietesSontInitialiseesAZero"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testLesProprietesSontInitialiseesAZero
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice4 : testLesProprietesJavaBeansFonctionnent"
+        id: exercice4_testLesProprietesJavaBeansFonctionnent
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testLesProprietesJavaBeansFonctionnent"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testLesProprietesJavaBeansFonctionnent
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice4 : testTriangleVideAireZero"
+        id: exercice4_testTriangleVideAireZero
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testTriangleVideAireZero"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testTriangleVideAireZero
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice4 : testTriangleUniteAireZeroVirguleCinq"
+        id: exercice4_testTriangleUniteAireZeroVirguleCinq
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testTriangleUniteAireZeroVirguleCinq"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testTriangleUniteAireZeroVirguleCinq
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice4 : testTriangleCorrectArea"
+        id: exercice4_testTriangleCorrectArea
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testTriangleCorrectArea"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testTriangleCorrectArea
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice4 : testTriangleDeuxiemeCorrectArea"
+        id: exercice4_testTriangleDeuxiemeCorrectArea
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testTriangleDeuxiemeCorrectArea"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testTriangleDeuxiemeCorrectArea
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice4 : testAirePositiveMemeAvecDeterminantNegatif"
+        id: exercice4_testAirePositiveMemeAvecDeterminantNegatif
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testAirePositiveMemeAvecDeterminantNegatif"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testAirePositiveMemeAvecDeterminantNegatif
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice4 : testModifierCoordonneeRecalculeAire"
+        id: exercice4_testModifierCoordonneeRecalculeAire
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testModifierCoordonneeRecalculeAire"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testModifierCoordonneeRecalculeAire
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice4 : testAreaPropertyEstLiee"
+        id: exercice4_testAreaPropertyEstLiee
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testAreaPropertyEstLiee"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testAreaPropertyEstLiee
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice4 : testPrintResultAfficheLeTexteAttendu"
+        id: exercice4_testPrintResultAfficheLeTexteAttendu
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice4 : testPrintResultAfficheLeTexteAttendu"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice4.AireTriangleTest testPrintResultAfficheLeTexteAttendu
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice5 : laFenetreEstVisible"
+        id: exercice5_laFenetreEstVisible
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : laFenetreEstVisible"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest laFenetreEstVisible
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice5 : laSceneExiste"
+        id: exercice5_laSceneExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : laSceneExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest laSceneExiste
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice5 : laRacineEstUnGridPane"
+        id: exercice5_laRacineEstUnGridPane
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : laRacineEstUnGridPane"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest laRacineEstUnGridPane
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice5 : lesSixSlidersExistent"
+        id: exercice5_lesSixSlidersExistent
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : lesSixSlidersExistent"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest lesSixSlidersExistent
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice5 : lesSlidersOntDesTickMarks"
+        id: exercice5_lesSlidersOntDesTickMarks
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : lesSlidersOntDesTickMarks"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest lesSlidersOntDesTickMarks
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice5 : leTextFieldAireExiste"
+        id: exercice5_leTextFieldAireExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : leTextFieldAireExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest leTextFieldAireExiste
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice5 : leTextFieldAireEstLieParBinding"
+        id: exercice5_leTextFieldAireEstLieParBinding
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : leTextFieldAireEstLieParBinding"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest leTextFieldAireEstLieParBinding
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice5 : deplacerSliderModifieAire"
+        id: exercice5_deplacerSliderModifieAire
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : deplacerSliderModifieAire"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest deplacerSliderModifieAire
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice5 : lePanneauDessinExiste"
+        id: exercice5_lePanneauDessinExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : lePanneauDessinExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest lePanneauDessinExiste
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice5 : lesTroisLignesExistent"
+        id: exercice5_lesTroisLignesExistent
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : lesTroisLignesExistent"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest lesTroisLignesExistent
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice5 : deplacerSliderModifieLeDessin"
+        id: exercice5_deplacerSliderModifieLeDessin
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : deplacerSliderModifieLeDessin"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest deplacerSliderModifieLeDessin
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice5 : aireCorrectePourTriangleConnu"
+        id: exercice5_aireCorrectePourTriangleConnu
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice5 : aireCorrectePourTriangleConnu"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice5.CalculatriceTriangleTest aireCorrectePourTriangleConnu
+          timeout: 5
+          max-score: 9
+
+      - name: "exercice6 : laFenetreEstVisible"
+        id: exercice6_laFenetreEstVisible
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : laFenetreEstVisible"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest laFenetreEstVisible
+          timeout: 5
+          max-score: 8
+
+      - name: "exercice6 : leChampIdentifiantExiste"
+        id: exercice6_leChampIdentifiantExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : leChampIdentifiantExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest leChampIdentifiantExiste
+          timeout: 5
+          max-score: 8
+
+      - name: "exercice6 : leChampMotDePasseExiste"
+        id: exercice6_leChampMotDePasseExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : leChampMotDePasseExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest leChampMotDePasseExiste
+          timeout: 5
+          max-score: 8
+
+      - name: "exercice6 : leChampMotDePasseEstNonEditableAuDebut"
+        id: exercice6_leChampMotDePasseEstNonEditableAuDebut
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : leChampMotDePasseEstNonEditableAuDebut"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest leChampMotDePasseEstNonEditableAuDebut
+          timeout: 5
+          max-score: 8
+
+      - name: "exercice6 : saisirSixCaracteresRendMotDePasseEditable"
+        id: exercice6_saisirSixCaracteresRendMotDePasseEditable
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : saisirSixCaracteresRendMotDePasseEditable"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest saisirSixCaracteresRendMotDePasseEditable
+          timeout: 5
+          max-score: 8
+
+      - name: "exercice6 : cinqCaracteresNeSuffitPas"
+        id: exercice6_cinqCaracteresNeSuffitPas
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : cinqCaracteresNeSuffitPas"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest cinqCaracteresNeSuffitPas
+          timeout: 5
+          max-score: 8
+
+      - name: "exercice6 : boutonOkDesactiveInitialement"
+        id: exercice6_boutonOkDesactiveInitialement
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : boutonOkDesactiveInitialement"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest boutonOkDesactiveInitialement
+          timeout: 5
+          max-score: 8
+
+      - name: "exercice6 : boutonOkDesactiveSiMotDePasseTropCourt"
+        id: exercice6_boutonOkDesactiveSiMotDePasseTropCourt
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : boutonOkDesactiveSiMotDePasseTropCourt"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest boutonOkDesactiveSiMotDePasseTropCourt
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice6 : motDePasseSansChiffreGardeOkDesactive"
+        id: exercice6_motDePasseSansChiffreGardeOkDesactive
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : motDePasseSansChiffreGardeOkDesactive"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest motDePasseSansChiffreGardeOkDesactive
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice6 : motDePasseSansMajusculeGardeOkDesactive"
+        id: exercice6_motDePasseSansMajusculeGardeOkDesactive
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : motDePasseSansMajusculeGardeOkDesactive"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest motDePasseSansMajusculeGardeOkDesactive
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice6 : motDePasseValideActiveOk"
+        id: exercice6_motDePasseValideActiveOk
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : motDePasseValideActiveOk"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest motDePasseValideActiveOk
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice6 : boutonAnnulerDesactiveSiChampsVides"
+        id: exercice6_boutonAnnulerDesactiveSiChampsVides
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : boutonAnnulerDesactiveSiChampsVides"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest boutonAnnulerDesactiveSiChampsVides
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice6 : boutonAnnulerActifSiUnChampRempli"
+        id: exercice6_boutonAnnulerActifSiUnChampRempli
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : boutonAnnulerActifSiUnChampRempli"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest boutonAnnulerActifSiUnChampRempli
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice6 : boutonAnnulerVideLesChamps"
+        id: exercice6_boutonAnnulerVideLesChamps
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : boutonAnnulerVideLesChamps"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest boutonAnnulerVideLesChamps
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice6 : boutonOkAfficheLMessage"
+        id: exercice6_boutonOkAfficheLMessage
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice6 : boutonOkAfficheLMessage"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice6.FormulaireConnexionTest boutonOkAfficheLMessage
+          timeout: 5
+          max-score: 7
+
+      - name: "exercice7 : laFenetreEstVisible"
+        id: exercice7_laFenetreEstVisible
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : laFenetreEstVisible"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest laFenetreEstVisible
+          timeout: 5
+          max-score: 13
+
+      - name: "exercice7 : leCercleExiste"
+        id: exercice7_leCercleExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : leCercleExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest leCercleExiste
+          timeout: 5
+          max-score: 13
+
+      - name: "exercice7 : leSliderExiste"
+        id: exercice7_leSliderExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : leSliderExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest leSliderExiste
+          timeout: 5
+          max-score: 13
+
+      - name: "exercice7 : leTextFieldExiste"
+        id: exercice7_leTextFieldExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : leTextFieldExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest leTextFieldExiste
+          timeout: 5
+          max-score: 13
+
+      - name: "exercice7 : rayonInitialEst150"
+        id: exercice7_rayonInitialEst150
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : rayonInitialEst150"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest rayonInitialEst150
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice7 : deplacerSliderModifieLeCercle"
+        id: exercice7_deplacerSliderModifieLeCercle
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : deplacerSliderModifieLeCercle"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest deplacerSliderModifieLeCercle
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice7 : deplacerSliderModifieLeTextField"
+        id: exercice7_deplacerSliderModifieLeTextField
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : deplacerSliderModifieLeTextField"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest deplacerSliderModifieLeTextField
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice7 : leTextFieldModifieLeSliderEtLeCercle"
+        id: exercice7_leTextFieldModifieLeSliderEtLeCercle
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : leTextFieldModifieLeSliderEtLeCercle"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest leTextFieldModifieLeSliderEtLeCercle
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice7 : leCercleEstCentreDansLePanneau"
+        id: exercice7_leCercleEstCentreDansLePanneau
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice7 : leCercleEstCentreDansLePanneau"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice7.CercleInteractifTest leCercleEstCentreDansLePanneau
+          timeout: 5
+          max-score: 12
+
+      - name: "exercice8 : laFenetreEstVisible"
+        id: exercice8_laFenetreEstVisible
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : laFenetreEstVisible"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest laFenetreEstVisible
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice8 : leSliderCelsiusExiste"
+        id: exercice8_leSliderCelsiusExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : leSliderCelsiusExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest leSliderCelsiusExiste
+          timeout: 5
+          max-score: 11
+
+      - name: "exercice8 : leSliderFahrenheitExiste"
+        id: exercice8_leSliderFahrenheitExiste
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : leSliderFahrenheitExiste"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest leSliderFahrenheitExiste
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : lesTextFieldsExistent"
+        id: exercice8_lesTextFieldsExistent
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : lesTextFieldsExistent"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest lesTextFieldsExistent
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : valeurInitialeCorrecte"
+        id: exercice8_valeurInitialeCorrecte
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : valeurInitialeCorrecte"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest valeurInitialeCorrecte
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : deplacerCelsiusMetAJourFahrenheit"
+        id: exercice8_deplacerCelsiusMetAJourFahrenheit
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : deplacerCelsiusMetAJourFahrenheit"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest deplacerCelsiusMetAJourFahrenheit
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : deplacerFahrenheitMetAJourCelsius"
+        id: exercice8_deplacerFahrenheitMetAJourCelsius
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : deplacerFahrenheitMetAJourCelsius"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest deplacerFahrenheitMetAJourCelsius
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : textFieldCelsiusSynchroAvecSlider"
+        id: exercice8_textFieldCelsiusSynchroAvecSlider
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : textFieldCelsiusSynchroAvecSlider"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest textFieldCelsiusSynchroAvecSlider
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : conversionCorrecteValeurIntermediaire"
+        id: exercice8_conversionCorrecteValeurIntermediaire
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : conversionCorrecteValeurIntermediaire"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest conversionCorrecteValeurIntermediaire
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : textFieldFahrenheitSynchroAvecSlider"
+        id: exercice8_textFieldFahrenheitSynchroAvecSlider
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : textFieldFahrenheitSynchroAvecSlider"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest textFieldFahrenheitSynchroAvecSlider
+          timeout: 5
+          max-score: 10
+
+      - name: "exercice8 : conversionAllerRetour"
+        id: exercice8_conversionAllerRetour
+        uses: IUTInfoAix-R202/autograding-command-grader@main
+        with:
+          test-name: "exercice8 : conversionAllerRetour"
+          setup-command: ""
+          command: ./grade-test.sh fr.univ_amu.iut.exercice8.ConvertisseurTemperaturesTest conversionAllerRetour
+          timeout: 5
+          max-score: 10
+
+      - name: Autograding Reporter
+        uses: IUTInfoAix-R202/autograding-grading-reporter@main
+        continue-on-error: true
+        env:
+          COMPILATION_RESULTS: "${{ steps.compilation.outputs.result }}"
+          EXERCICE1_TESTLAPROPRIETEEXISTEAPRESSETANINT_RESULTS: "${{ steps.exercice1_testLaProprieteExisteApresSetAnInt.outputs.result }}"
+          EXERCICE1_TESTLAVALEURINITIALEEST1024_RESULTS: "${{ steps.exercice1_testLaValeurInitialeEst1024.outputs.result }}"
+          EXERCICE1_TESTCREERPROPRIETEAFFICHELETOSTRING_RESULTS: "${{ steps.exercice1_testCreerProprieteAfficheLeToString.outputs.result }}"
+          EXERCICE1_TESTCREERPROPRIETEAFFICHEGET_RESULTS: "${{ steps.exercice1_testCreerProprieteAfficheGet.outputs.result }}"
+          EXERCICE1_TESTCREERPROPRIETEAFFICHEGETVALUE_RESULTS: "${{ steps.exercice1_testCreerProprieteAfficheGetValue.outputs.result }}"
+          EXERCICE1_TESTINVALIDATIONLISTENERESTDECLENCHE_RESULTS: "${{ steps.exercice1_testInvalidationListenerEstDeclenche.outputs.result }}"
+          EXERCICE1_TESTINVALIDATIONLISTENERPASDECLENCHESIMEMEVALEUR_RESULTS: "${{ steps.exercice1_testInvalidationListenerPasDeclencheSiMemeValeur.outputs.result }}"
+          EXERCICE1_TESTINVALIDATIONLISTENERESTPARESSEUX_RESULTS: "${{ steps.exercice1_testInvalidationListenerEstParesseux.outputs.result }}"
+          EXERCICE1_TESTINVALIDATIONLISTENERRETIREFONCTIONNE_RESULTS: "${{ steps.exercice1_testInvalidationListenerRetireFonctionne.outputs.result }}"
+          EXERCICE1_TESTCHANGELISTENERESTDECLENCHEAVECANCIENNEETNOUVELLEVALEUR_RESULTS: "${{ steps.exercice1_testChangeListenerEstDeclencheAvecAncienneEtNouvelleValeur.outputs.result }}"
+          EXERCICE1_TESTCHANGELISTENERDECLENCHEACHAQUEMISEAJOUR_RESULTS: "${{ steps.exercice1_testChangeListenerDeclencheAChaqueMiseAJour.outputs.result }}"
+          EXERCICE1_TESTCHANGELISTENERRETIREFONCTIONNE_RESULTS: "${{ steps.exercice1_testChangeListenerRetireFonctionne.outputs.result }}"
+          EXERCICE2_TESTBINDPROPAGELAVALEUR_RESULTS: "${{ steps.exercice2_testBindPropageLaValeur.outputs.result }}"
+          EXERCICE2_TESTLACIBLESUITLASOURCE_RESULTS: "${{ steps.exercice2_testLaCibleSuitLaSource.outputs.result }}"
+          EXERCICE2_TESTUNBINDARRETELAPROPAGATION_RESULTS: "${{ steps.exercice2_testUnbindArreteLaPropagation.outputs.result }}"
+          EXERCICE2_TESTISBOUNDRETOURNETRUESILIEE_RESULTS: "${{ steps.exercice2_testIsBoundRetourneTrueSiLiee.outputs.result }}"
+          EXERCICE2_TESTAFFICHEVALEURINITIALEAVANTLIAISON_RESULTS: "${{ steps.exercice2_testAfficheValeurInitialeAvantLiaison.outputs.result }}"
+          EXERCICE2_TESTLIAISONPROPAGELAVALEURSOURCE_RESULTS: "${{ steps.exercice2_testLiaisonPropageLaValeurSource.outputs.result }}"
+          EXERCICE2_TESTCHANGEMENTSOURCEPROPAGEVERSCIBLE_RESULTS: "${{ steps.exercice2_testChangementSourcePropageVersCible.outputs.result }}"
+          EXERCICE2_TESTAPRESUNBINDLACIBLENESUITPLUS_RESULTS: "${{ steps.exercice2_testApresUnbindLaCibleNeSuitPlus.outputs.result }}"
+          EXERCICE3_TESTLETEXTEESTCORRECT_RESULTS: "${{ steps.exercice3_testLeTexteEstCorrect.outputs.result }}"
+          EXERCICE3_TESTLACOULEURESTSTOCKEE_RESULTS: "${{ steps.exercice3_testLaCouleurEstStockee.outputs.result }}"
+          EXERCICE3_TESTNBCLICSINITIALESTZERO_RESULTS: "${{ steps.exercice3_testNbClicsInitialEstZero.outputs.result }}"
+          EXERCICE3_TESTNBCLICSPROPERTYRETOURNEUNEPROPRIETE_RESULTS: "${{ steps.exercice3_testNbClicsPropertyRetourneUnePropriete.outputs.result }}"
+          EXERCICE3_TESTCLICINCREMENTENBCLICS_RESULTS: "${{ steps.exercice3_testClicIncrementeNbClics.outputs.result }}"
+          EXERCICE3_TESTDEUXCLICSINCREMENTENT_RESULTS: "${{ steps.exercice3_testDeuxClicsIncrementent.outputs.result }}"
+          EXERCICE3_TESTLAPROPERTYESTLIEEAUCOMPTEUR_RESULTS: "${{ steps.exercice3_testLaPropertyEstLieeAuCompteur.outputs.result }}"
+          EXERCICE3_LAFENETREESTVISIBLE_RESULTS: "${{ steps.exercice3_laFenetreEstVisible.outputs.result }}"
+          EXERCICE3_LASCENEEXISTE_RESULTS: "${{ steps.exercice3_laSceneExiste.outputs.result }}"
+          EXERCICE3_LARACINEESTUNBORDERPANE_RESULTS: "${{ steps.exercice3_laRacineEstUnBorderPane.outputs.result }}"
+          EXERCICE3_LESTROISBOUTONSEXISTENT_RESULTS: "${{ steps.exercice3_lesTroisBoutonsExistent.outputs.result }}"
+          EXERCICE3_LESBOUTONSONTUNECOULEUR_RESULTS: "${{ steps.exercice3_lesBoutonsOntUneCouleur.outputs.result }}"
+          EXERCICE3_LEHBOXDESBOUTONSESTENHAUT_RESULTS: "${{ steps.exercice3_leHBoxDesBoutonsEstEnHaut.outputs.result }}"
+          EXERCICE3_LAZONEDECOULEUREXISTE_RESULTS: "${{ steps.exercice3_laZoneDeCouleurExiste.outputs.result }}"
+          EXERCICE3_LELABELCOMPTEURSEXISTE_RESULTS: "${{ steps.exercice3_leLabelCompteursExiste.outputs.result }}"
+          EXERCICE3_LETEXTEINITIALAVANTCLIC_RESULTS: "${{ steps.exercice3_leTexteInitialAvantClic.outputs.result }}"
+          EXERCICE3_CLIQUERROUGEMETLAZONEENROUGE_RESULTS: "${{ steps.exercice3_cliquerRougeMetLaZoneEnRouge.outputs.result }}"
+          EXERCICE3_CLIQUERVERTMETLAZONEENVERT_RESULTS: "${{ steps.exercice3_cliquerVertMetLaZoneEnVert.outputs.result }}"
+          EXERCICE3_CLIQUERINCREMENTELECOMPTEUR_RESULTS: "${{ steps.exercice3_cliquerIncrementeLeCompteur.outputs.result }}"
+          EXERCICE3_LETEXTEBASCULEDEBIENVENUEAUXCOMPTEURS_RESULTS: "${{ steps.exercice3_leTexteBasculeDeBienvenueAuxCompteurs.outputs.result }}"
+          EXERCICE3_LESCOMPTEURSSONTINDEPENDANTS_RESULTS: "${{ steps.exercice3_lesCompteursSontIndependants.outputs.result }}"
+          EXERCICE3_LELABELESTLIEPARBINDING_RESULTS: "${{ steps.exercice3_leLabelEstLieParBinding.outputs.result }}"
+          EXERCICE4_TESTLESPROPRIETESSONTINITIALISEESAZERO_RESULTS: "${{ steps.exercice4_testLesProprietesSontInitialiseesAZero.outputs.result }}"
+          EXERCICE4_TESTLESPROPRIETESJAVABEANSFONCTIONNENT_RESULTS: "${{ steps.exercice4_testLesProprietesJavaBeansFonctionnent.outputs.result }}"
+          EXERCICE4_TESTTRIANGLEVIDEAIREZERO_RESULTS: "${{ steps.exercice4_testTriangleVideAireZero.outputs.result }}"
+          EXERCICE4_TESTTRIANGLEUNITEAIREZEROVIRGULECINQ_RESULTS: "${{ steps.exercice4_testTriangleUniteAireZeroVirguleCinq.outputs.result }}"
+          EXERCICE4_TESTTRIANGLECORRECTAREA_RESULTS: "${{ steps.exercice4_testTriangleCorrectArea.outputs.result }}"
+          EXERCICE4_TESTTRIANGLEDEUXIEMECORRECTAREA_RESULTS: "${{ steps.exercice4_testTriangleDeuxiemeCorrectArea.outputs.result }}"
+          EXERCICE4_TESTAIREPOSITIVEMEMEAVECDETERMINANTNEGATIF_RESULTS: "${{ steps.exercice4_testAirePositiveMemeAvecDeterminantNegatif.outputs.result }}"
+          EXERCICE4_TESTMODIFIERCOORDONNEERECALCULEAIRE_RESULTS: "${{ steps.exercice4_testModifierCoordonneeRecalculeAire.outputs.result }}"
+          EXERCICE4_TESTAREAPROPERTYESTLIEE_RESULTS: "${{ steps.exercice4_testAreaPropertyEstLiee.outputs.result }}"
+          EXERCICE4_TESTPRINTRESULTAFFICHELETEXTEATTENDU_RESULTS: "${{ steps.exercice4_testPrintResultAfficheLeTexteAttendu.outputs.result }}"
+          EXERCICE5_LAFENETREESTVISIBLE_RESULTS: "${{ steps.exercice5_laFenetreEstVisible.outputs.result }}"
+          EXERCICE5_LASCENEEXISTE_RESULTS: "${{ steps.exercice5_laSceneExiste.outputs.result }}"
+          EXERCICE5_LARACINEESTUNGRIDPANE_RESULTS: "${{ steps.exercice5_laRacineEstUnGridPane.outputs.result }}"
+          EXERCICE5_LESSIXSLIDERSEXISTENT_RESULTS: "${{ steps.exercice5_lesSixSlidersExistent.outputs.result }}"
+          EXERCICE5_LESSLIDERSONTDESTICKMARKS_RESULTS: "${{ steps.exercice5_lesSlidersOntDesTickMarks.outputs.result }}"
+          EXERCICE5_LETEXTFIELDAIREEXISTE_RESULTS: "${{ steps.exercice5_leTextFieldAireExiste.outputs.result }}"
+          EXERCICE5_LETEXTFIELDAIREESTLIEPARBINDING_RESULTS: "${{ steps.exercice5_leTextFieldAireEstLieParBinding.outputs.result }}"
+          EXERCICE5_DEPLACERSLIDERMODIFIEAIRE_RESULTS: "${{ steps.exercice5_deplacerSliderModifieAire.outputs.result }}"
+          EXERCICE5_LEPANNEAUDESSINEXISTE_RESULTS: "${{ steps.exercice5_lePanneauDessinExiste.outputs.result }}"
+          EXERCICE5_LESTROISLIGNESEXISTENT_RESULTS: "${{ steps.exercice5_lesTroisLignesExistent.outputs.result }}"
+          EXERCICE5_DEPLACERSLIDERMODIFIELEDESSIN_RESULTS: "${{ steps.exercice5_deplacerSliderModifieLeDessin.outputs.result }}"
+          EXERCICE5_AIRECORRECTEPOURTRIANGLECONNU_RESULTS: "${{ steps.exercice5_aireCorrectePourTriangleConnu.outputs.result }}"
+          EXERCICE6_LAFENETREESTVISIBLE_RESULTS: "${{ steps.exercice6_laFenetreEstVisible.outputs.result }}"
+          EXERCICE6_LECHAMPIDENTIFIANTEXISTE_RESULTS: "${{ steps.exercice6_leChampIdentifiantExiste.outputs.result }}"
+          EXERCICE6_LECHAMPMOTDEPASSEEXISTE_RESULTS: "${{ steps.exercice6_leChampMotDePasseExiste.outputs.result }}"
+          EXERCICE6_LECHAMPMOTDEPASSEESTNONEDITABLEAUDEBUT_RESULTS: "${{ steps.exercice6_leChampMotDePasseEstNonEditableAuDebut.outputs.result }}"
+          EXERCICE6_SAISIRSIXCARACTERESRENDMOTDEPASSEEDITABLE_RESULTS: "${{ steps.exercice6_saisirSixCaracteresRendMotDePasseEditable.outputs.result }}"
+          EXERCICE6_CINQCARACTERESNESUFFITPAS_RESULTS: "${{ steps.exercice6_cinqCaracteresNeSuffitPas.outputs.result }}"
+          EXERCICE6_BOUTONOKDESACTIVEINITIALEMENT_RESULTS: "${{ steps.exercice6_boutonOkDesactiveInitialement.outputs.result }}"
+          EXERCICE6_BOUTONOKDESACTIVESIMOTDEPASSETROPCOURT_RESULTS: "${{ steps.exercice6_boutonOkDesactiveSiMotDePasseTropCourt.outputs.result }}"
+          EXERCICE6_MOTDEPASSESANSCHIFFREGARDEOKDESACTIVE_RESULTS: "${{ steps.exercice6_motDePasseSansChiffreGardeOkDesactive.outputs.result }}"
+          EXERCICE6_MOTDEPASSESANSMAJUSCULEGARDEOKDESACTIVE_RESULTS: "${{ steps.exercice6_motDePasseSansMajusculeGardeOkDesactive.outputs.result }}"
+          EXERCICE6_MOTDEPASSEVALIDEACTIVEOK_RESULTS: "${{ steps.exercice6_motDePasseValideActiveOk.outputs.result }}"
+          EXERCICE6_BOUTONANNULERDESACTIVESICHAMPSVIDES_RESULTS: "${{ steps.exercice6_boutonAnnulerDesactiveSiChampsVides.outputs.result }}"
+          EXERCICE6_BOUTONANNULERACTIFSIUNCHAMPREMPLI_RESULTS: "${{ steps.exercice6_boutonAnnulerActifSiUnChampRempli.outputs.result }}"
+          EXERCICE6_BOUTONANNULERVIDELESCHAMPS_RESULTS: "${{ steps.exercice6_boutonAnnulerVideLesChamps.outputs.result }}"
+          EXERCICE6_BOUTONOKAFFICHELMESSAGE_RESULTS: "${{ steps.exercice6_boutonOkAfficheLMessage.outputs.result }}"
+          EXERCICE7_LAFENETREESTVISIBLE_RESULTS: "${{ steps.exercice7_laFenetreEstVisible.outputs.result }}"
+          EXERCICE7_LECERCLEEXISTE_RESULTS: "${{ steps.exercice7_leCercleExiste.outputs.result }}"
+          EXERCICE7_LESLIDEREXISTE_RESULTS: "${{ steps.exercice7_leSliderExiste.outputs.result }}"
+          EXERCICE7_LETEXTFIELDEXISTE_RESULTS: "${{ steps.exercice7_leTextFieldExiste.outputs.result }}"
+          EXERCICE7_RAYONINITIALEST150_RESULTS: "${{ steps.exercice7_rayonInitialEst150.outputs.result }}"
+          EXERCICE7_DEPLACERSLIDERMODIFIELECERCLE_RESULTS: "${{ steps.exercice7_deplacerSliderModifieLeCercle.outputs.result }}"
+          EXERCICE7_DEPLACERSLIDERMODIFIELETEXTFIELD_RESULTS: "${{ steps.exercice7_deplacerSliderModifieLeTextField.outputs.result }}"
+          EXERCICE7_LETEXTFIELDMODIFIELESLIDERETLECERCLE_RESULTS: "${{ steps.exercice7_leTextFieldModifieLeSliderEtLeCercle.outputs.result }}"
+          EXERCICE7_LECERCLEESTCENTREDANSLEPANNEAU_RESULTS: "${{ steps.exercice7_leCercleEstCentreDansLePanneau.outputs.result }}"
+          EXERCICE8_LAFENETREESTVISIBLE_RESULTS: "${{ steps.exercice8_laFenetreEstVisible.outputs.result }}"
+          EXERCICE8_LESLIDERCELSIUSEXISTE_RESULTS: "${{ steps.exercice8_leSliderCelsiusExiste.outputs.result }}"
+          EXERCICE8_LESLIDERFAHRENHEITEXISTE_RESULTS: "${{ steps.exercice8_leSliderFahrenheitExiste.outputs.result }}"
+          EXERCICE8_LESTEXTFIELDSEXISTENT_RESULTS: "${{ steps.exercice8_lesTextFieldsExistent.outputs.result }}"
+          EXERCICE8_VALEURINITIALECORRECTE_RESULTS: "${{ steps.exercice8_valeurInitialeCorrecte.outputs.result }}"
+          EXERCICE8_DEPLACERCELSIUSMETAJOURFAHRENHEIT_RESULTS: "${{ steps.exercice8_deplacerCelsiusMetAJourFahrenheit.outputs.result }}"
+          EXERCICE8_DEPLACERFAHRENHEITMETAJOURCELSIUS_RESULTS: "${{ steps.exercice8_deplacerFahrenheitMetAJourCelsius.outputs.result }}"
+          EXERCICE8_TEXTFIELDCELSIUSSYNCHROAVECSLIDER_RESULTS: "${{ steps.exercice8_textFieldCelsiusSynchroAvecSlider.outputs.result }}"
+          EXERCICE8_CONVERSIONCORRECTEVALEURINTERMEDIAIRE_RESULTS: "${{ steps.exercice8_conversionCorrecteValeurIntermediaire.outputs.result }}"
+          EXERCICE8_TEXTFIELDFAHRENHEITSYNCHROAVECSLIDER_RESULTS: "${{ steps.exercice8_textFieldFahrenheitSynchroAvecSlider.outputs.result }}"
+          EXERCICE8_CONVERSIONALLERRETOUR_RESULTS: "${{ steps.exercice8_conversionAllerRetour.outputs.result }}"
+        with:
+          runners: compilation,exercice1_testLaProprieteExisteApresSetAnInt,exercice1_testLaValeurInitialeEst1024,exercice1_testCreerProprieteAfficheLeToString,exercice1_testCreerProprieteAfficheGet,exercice1_testCreerProprieteAfficheGetValue,exercice1_testInvalidationListenerEstDeclenche,exercice1_testInvalidationListenerPasDeclencheSiMemeValeur,exercice1_testInvalidationListenerEstParesseux,exercice1_testInvalidationListenerRetireFonctionne,exercice1_testChangeListenerEstDeclencheAvecAncienneEtNouvelleValeur,exercice1_testChangeListenerDeclencheAChaqueMiseAJour,exercice1_testChangeListenerRetireFonctionne,exercice2_testBindPropageLaValeur,exercice2_testLaCibleSuitLaSource,exercice2_testUnbindArreteLaPropagation,exercice2_testIsBoundRetourneTrueSiLiee,exercice2_testAfficheValeurInitialeAvantLiaison,exercice2_testLiaisonPropageLaValeurSource,exercice2_testChangementSourcePropageVersCible,exercice2_testApresUnbindLaCibleNeSuitPlus,exercice3_testLeTexteEstCorrect,exercice3_testLaCouleurEstStockee,exercice3_testNbClicsInitialEstZero,exercice3_testNbClicsPropertyRetourneUnePropriete,exercice3_testClicIncrementeNbClics,exercice3_testDeuxClicsIncrementent,exercice3_testLaPropertyEstLieeAuCompteur,exercice3_laFenetreEstVisible,exercice3_laSceneExiste,exercice3_laRacineEstUnBorderPane,exercice3_lesTroisBoutonsExistent,exercice3_lesBoutonsOntUneCouleur,exercice3_leHBoxDesBoutonsEstEnHaut,exercice3_laZoneDeCouleurExiste,exercice3_leLabelCompteursExiste,exercice3_leTexteInitialAvantClic,exercice3_cliquerRougeMetLaZoneEnRouge,exercice3_cliquerVertMetLaZoneEnVert,exercice3_cliquerIncrementeLeCompteur,exercice3_leTexteBasculeDeBienvenueAuxCompteurs,exercice3_lesCompteursSontIndependants,exercice3_leLabelEstLieParBinding,exercice4_testLesProprietesSontInitialiseesAZero,exercice4_testLesProprietesJavaBeansFonctionnent,exercice4_testTriangleVideAireZero,exercice4_testTriangleUniteAireZeroVirguleCinq,exercice4_testTriangleCorrectArea,exercice4_testTriangleDeuxiemeCorrectArea,exercice4_testAirePositiveMemeAvecDeterminantNegatif,exercice4_testModifierCoordonneeRecalculeAire,exercice4_testAreaPropertyEstLiee,exercice4_testPrintResultAfficheLeTexteAttendu,exercice5_laFenetreEstVisible,exercice5_laSceneExiste,exercice5_laRacineEstUnGridPane,exercice5_lesSixSlidersExistent,exercice5_lesSlidersOntDesTickMarks,exercice5_leTextFieldAireExiste,exercice5_leTextFieldAireEstLieParBinding,exercice5_deplacerSliderModifieAire,exercice5_lePanneauDessinExiste,exercice5_lesTroisLignesExistent,exercice5_deplacerSliderModifieLeDessin,exercice5_aireCorrectePourTriangleConnu,exercice6_laFenetreEstVisible,exercice6_leChampIdentifiantExiste,exercice6_leChampMotDePasseExiste,exercice6_leChampMotDePasseEstNonEditableAuDebut,exercice6_saisirSixCaracteresRendMotDePasseEditable,exercice6_cinqCaracteresNeSuffitPas,exercice6_boutonOkDesactiveInitialement,exercice6_boutonOkDesactiveSiMotDePasseTropCourt,exercice6_motDePasseSansChiffreGardeOkDesactive,exercice6_motDePasseSansMajusculeGardeOkDesactive,exercice6_motDePasseValideActiveOk,exercice6_boutonAnnulerDesactiveSiChampsVides,exercice6_boutonAnnulerActifSiUnChampRempli,exercice6_boutonAnnulerVideLesChamps,exercice6_boutonOkAfficheLMessage,exercice7_laFenetreEstVisible,exercice7_leCercleExiste,exercice7_leSliderExiste,exercice7_leTextFieldExiste,exercice7_rayonInitialEst150,exercice7_deplacerSliderModifieLeCercle,exercice7_deplacerSliderModifieLeTextField,exercice7_leTextFieldModifieLeSliderEtLeCercle,exercice7_leCercleEstCentreDansLePanneau,exercice8_laFenetreEstVisible,exercice8_leSliderCelsiusExiste,exercice8_leSliderFahrenheitExiste,exercice8_lesTextFieldsExistent,exercice8_valeurInitialeCorrecte,exercice8_deplacerCelsiusMetAJourFahrenheit,exercice8_deplacerFahrenheitMetAJourCelsius,exercice8_textFieldCelsiusSynchroAvecSlider,exercice8_conversionCorrecteValeurIntermediaire,exercice8_textFieldFahrenheitSynchroAvecSlider,exercice8_conversionAllerRetour
+
+      - name: Sauvegarder le cache des rapports Surefire
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: target/surefire-reports
+          key: surefire-${{ github.ref_name }}-${{ github.sha }}
+      #@@@AUTOGRADING-END@@@

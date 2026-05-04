@@ -1,0 +1,27 @@
+# Build and test with Maven
+name: Java CI with Maven
+
+on:
+  - push
+  - pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.repository != 'IUTInfoAix-R202/template-tp-javafx'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK 25 with JavaFX
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'zulu'
+          java-package: 'jdk+fx'
+          cache: maven
+
+      - name: Run headless tests
+        run: xvfb-run --auto-servernum ./mvnw -B verify --file pom.xml

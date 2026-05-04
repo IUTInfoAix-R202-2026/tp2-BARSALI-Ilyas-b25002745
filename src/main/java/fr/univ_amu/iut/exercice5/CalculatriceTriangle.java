@@ -1,0 +1,156 @@
+package fr.univ_amu.iut.exercice5;
+
+import fr.univ_amu.iut.exercice4.AireTriangle;
+import javafx.application.Application;
+import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.Pane;
+import javafx.scene.shape.Line;
+import javafx.stage.Stage;
+
+/**
+ * Exercice 5 - Calculatrice de triangle avec dessin.
+ *
+ * <p>Cet exercice réutilise la classe {@link AireTriangle} de l'exercice 4 comme modèle, et la
+ * connecte à une interface graphique. Six sliders contrôlent les coordonnées des trois points,
+ * l'aire est calculée automatiquement via les bindings du modèle, et le triangle est dessiné en
+ * temps réel.
+ *
+ * <p>Concepts :
+ *
+ * <ul>
+ *   <li>Binding entre objets : {@code slider.valueProperty()} -> {@code modele.x1Property()}
+ *   <li>{@link GridPane} avec {@link ColumnConstraints}
+ *   <li>{@link Slider} : configuration (min, max, tick marks, snap)
+ *   <li>{@link Line} avec coordonnées liées au modèle (facteur d'échelle 50:1)
+ * </ul>
+ */
+public class CalculatriceTriangle extends Application {
+
+  private final AireTriangle modele = new AireTriangle();
+
+  private final Slider sliderX1 = new Slider(0, 10, 0);
+  private final Slider sliderY1 = new Slider(0, 10, 0);
+  private final Slider sliderX2 = new Slider(0, 10, 0);
+  private final Slider sliderY2 = new Slider(0, 10, 0);
+  private final Slider sliderX3 = new Slider(0, 10, 0);
+  private final Slider sliderY3 = new Slider(0, 10, 0);
+
+  private final Label labelX1 = new Label("X1 :");
+  private final Label labelY1 = new Label("Y1 :");
+  private final Label labelX2 = new Label("X2 :");
+  private final Label labelY2 = new Label("Y2 :");
+  private final Label labelX3 = new Label("X3 :");
+  private final Label labelY3 = new Label("Y3 :");
+
+  private final Label labelP1 = new Label("P1");
+  private final Label labelP2 = new Label("P2");
+  private final Label labelP3 = new Label("P3");
+
+  private final Label labelAire = new Label("Aire :");
+  private final TextField textFieldAire = new TextField();
+
+  private final Line ligneP1P2 = new Line();
+  private final Line ligneP2P3 = new Line();
+  private final Line ligneP3P1 = new Line();
+
+  private final Pane panneauDessin = new Pane();
+
+  private final GridPane grille = new GridPane();
+
+  @Override
+  public void start(Stage primaryStage) {
+    // TODO exercice 5 : assembler l'interface et créer les bindings.
+    //
+    // 1. Appeler configGrille() pour configurer le GridPane.
+    // 2. Appeler configSliders() pour configurer les 6 sliders.
+    // 3. Appeler ajouterSliders() pour placer les sliders dans la grille.
+    // 4. Appeler ajouterAire() pour placer le label et le champ aire.
+    // 5. Appeler ajouterLabelsPoints() pour placer les titres P1, P2, P3.
+    // 6. Appeler ajouterPanneauDessin() pour ajouter la zone de dessin.
+    // 7. Appeler creerBindings() pour lier les sliders au modele.
+    // 8. Creer la Scene, l'attacher au Stage, afficher.
+  }
+
+  static void configSlider(Slider slider) {
+    // TODO exercice 5 : configurer un slider (tick marks, snap, etc.).
+    //
+    // slider.setShowTickLabels(true)
+    // slider.setShowTickMarks(true)
+    // slider.setMajorTickUnit(1)
+    // slider.setMinorTickCount(0)
+    // slider.setBlockIncrement(1)
+    // slider.setSnapToTicks(true)
+  }
+
+  void configSliders() {
+    // TODO exercice 5 : appeler configSlider() sur les 6 sliders.
+    // Donner un id à chaque slider : "slider-x1", "slider-y1", etc.
+  }
+
+  void configGrille() {
+    // TODO exercice 5 : configurer le GridPane.
+    //
+    // grille.setHgap(10), grille.setVgap(10)
+    // Ajouter 3 ColumnConstraints de largeur 200 chacune (200px par colonne).
+  }
+
+  void ajouterSliders() {
+    // TODO exercice 5 : placer les 6 sliders et leurs libellés dans la grille.
+    //
+    // Disposition (col, row) :
+    //   (0, 1) labelX1   (1, 1) sliderX1
+    //   (0, 2) labelY1   (1, 2) sliderY1
+    //   (0, 3) labelX2   (1, 3) sliderX2
+    //   (0, 4) labelY2   (1, 4) sliderY2
+    //   (0, 5) labelX3   (1, 5) sliderX3
+    //   (0, 6) labelY3   (1, 6) sliderY3
+  }
+
+  void ajouterAire() {
+    // TODO exercice 5 : placer le label "Aire :" et le textFieldAire dans la grille.
+    //
+    // (0, 7) labelAire   (1, 7) textFieldAire
+    // textFieldAire.setId("aire") et setEditable(false) (résultat en lecture seule)
+  }
+
+  void ajouterLabelsPoints() {
+    // TODO exercice 5 : placer les labels P1, P2, P3 en titres de section.
+    //
+    // (0, 0) titre ou  (1, 0) labelP1 ... (position libre selon votre choix)
+  }
+
+  void ajouterPanneauDessin() {
+    // TODO exercice 5 : ajouter le panneau de dessin avec les 3 lignes (Line).
+    //
+    // panneauDessin.setId("dessin")
+    // panneauDessin.setPrefSize(500, 500)
+    // panneauDessin.getChildren().addAll(ligneP1P2, ligneP2P3, ligneP3P1)
+    // grille.add(panneauDessin, 0, 8, 3, 1)  // colspan 3
+  }
+
+  void creerBindings() {
+    // TODO exercice 5 : lier les sliders au modèle et les lignes aux coordonnées.
+    //
+    // 1. Lier chaque slider au modèle :
+    //    modele.x1Property().bind(sliderX1.valueProperty())
+    //    (idem pour y1, x2, y2, x3, y3)
+    //
+    // 2. Lier textFieldAire au modèle :
+    //    textFieldAire.textProperty().bind(modele.areaProperty().asString())
+    //
+    // 3. Lier les coordonnées des lignes au modèle (facteur 50) :
+    //    ligneP1P2.startXProperty().bind(modele.x1Property().multiply(50))
+    //    ligneP1P2.startYProperty().bind(modele.y1Property().multiply(50))
+    //    ligneP1P2.endXProperty().bind(modele.x2Property().multiply(50))
+    //    ligneP1P2.endYProperty().bind(modele.y2Property().multiply(50))
+    //    (idem pour P2P3 et P3P1)
+  }
+
+  public static void main(String[] args) {
+    launch(args);
+  }
+}
