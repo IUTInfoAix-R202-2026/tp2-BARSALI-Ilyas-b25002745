@@ -1,36 +1,13 @@
 package fr.univ_amu.iut.exercice4;
 
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.NumberBinding;
 import javafx.beans.binding.StringExpression;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 
-/**
- * Exercice 4 - Calcul de l'aire d'un triangle par bindings.
- *
- * <p>Cette classe modèle encapsule les coordonnées de trois points et calcule automatiquement
- * l'aire du triangle via la formule du déterminant :
- *
- * <pre>
- * aire = |x1(y2-y3) + x2(y3-y1) + x3(y1-y2)| / 2
- * </pre>
- *
- * <p>L'aire est recalculée <b>automatiquement</b> à chaque modification d'une coordonnée grâce aux
- * bindings JavaFX. Aucun appel manuel n'est nécessaire.
- *
- * <p>Cet exercice explore :
- *
- * <ul>
- *   <li>La convention JavaBeans complète : {@code getX1()}, {@code setX1()}, {@code x1Property()}
- *   <li>Les bindings de haut niveau : {@code Bindings.multiply()}, {@code subtract()}, etc.
- *   <li>L'API fluente : {@code x1.multiply(y2).subtract(...)}
- *   <li>{@code Bindings.format()} pour créer une {@link StringExpression}
- * </ul>
- *
- * @see <a
- *     href="https://openjfx.io/javadoc/25/javafx.base/javafx/beans/binding/Bindings.html">Bindings</a>
- */
 public class AireTriangle {
 
   private final IntegerProperty x1 = new SimpleIntegerProperty(0);
@@ -48,51 +25,35 @@ public class AireTriangle {
     createBinding();
   }
 
-  /**
-   * Crée le binding qui calcule l'aire automatiquement.
-   *
-   * <p>Utiliser l'API fluente de JavaFX :
-   *
-   * <pre>
-   * NumberBinding determinant = x1.multiply(y2).subtract(x1.multiply(y3))
-   *     .add(x2.multiply(y3)).subtract(x2.multiply(y1))
-   *     .add(x3.multiply(y1)).subtract(x3.multiply(y2));
-   * </pre>
-   *
-   * <p>Puis lier {@code area} au résultat divisé par 2 (en valeur absolue). Créer aussi une {@link
-   * StringExpression} via {@code Bindings.format()}.
-   */
   private void createBinding() {
-    // TODO exercice 4 : créer le binding pour calculer l'aire.
-    //
-    // Partie A - Formule du déterminant avec l'API fluente :
-    //
-    // 1. Calculer le déterminant comme NumberBinding :
-    //    determinant = x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)
-    //    En utilisant l'API fluente :
-    //    x1.multiply(y2).subtract(x1.multiply(y3))
-    //      .add(x2.multiply(y3)).subtract(x2.multiply(y1))
-    //      .add(x3.multiply(y1)).subtract(x3.multiply(y2))
-    //
-    // 2. Lier area au déterminant divisé par 2 :
-    //    area.bind(determinant.divide(2.0))
-    //    Note : pour la valeur absolue, utiliser
-    //    Bindings.when(determinant.greaterThanOrEqualTo(0))
-    //            .then(determinant.divide(2.0))
-    //            .otherwise(determinant.negate().divide(2.0))
-    //
-    // Partie B - StringExpression pour l'affichage :
-    //
-    // 3. Créer output avec Bindings.format() :
-    //    "P1(%s,%s) P2(%s,%s) P3(%s,%s) => aire = %s"
-    //    en passant x1, y1, x2, y2, x3, y3, area
+    // Calcul du déterminant avec l'API fluente JavaFX
+    // Formule : x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)
+    NumberBinding determinant =
+        x1.multiply(y2)
+            .subtract(x1.multiply(y3))
+            .add(x2.multiply(y3))
+            .subtract(x2.multiply(y1))
+            .add(x3.multiply(y1))
+            .subtract(x3.multiply(y2));
+
+    // Lier area à la valeur absolue du déterminant divisé par 2
+    // Bindings.when() remplace Math.abs() de façon réactive
+    area.bind(
+        Bindings.when(determinant.greaterThanOrEqualTo(0))
+            .then(determinant.divide(2.0))
+            .otherwise(determinant.negate().divide(2.0)));
+
+    // StringExpression pour afficher les coordonnées et l'aire formatées
+    output =
+        Bindings.format("P1(%s,%s) P2(%s,%s) P3(%s,%s) => aire = %s", x1, y1, x2, y2, x3, y3, area);
   }
 
   void printResult() {
-    // TODO exercice 4 : afficher output.get() sur System.out.
+    // Affiche la StringExpression output dans la console
+    System.out.println(output.get());
   }
 
-  // --- Setters de points ---
+  // --- Setters de points (raccourcis pour définir x et y en même temps) ---
 
   public void setP1(int x, int y) {
     x1.set(x);
@@ -193,7 +154,7 @@ public class AireTriangle {
     return y3;
   }
 
-  // --- Accesseur aire ---
+  // --- Accesseur aire (lecture seule depuis l'extérieur) ---
 
   public double getArea() {
     return area.get();
@@ -205,16 +166,16 @@ public class AireTriangle {
 
   public static void main(String[] args) {
     AireTriangle t = new AireTriangle();
-    t.printResult();
+    t.printResult(); // P1(0,0) P2(0,0) P3(0,0) => aire = 0.0
 
     t.setP1(0, 1);
     t.setP2(6, 0);
     t.setP3(4, 3);
-    t.printResult();
+    t.printResult(); // P1(0,1) P2(6,0) P3(4,3) => aire = 9.0
 
     t.setP1(1, 0);
     t.setP2(2, 2);
     t.setP3(0, 1);
-    t.printResult();
+    t.printResult(); // P1(1,0) P2(2,2) P3(0,1) => aire = 1.5
   }
 }

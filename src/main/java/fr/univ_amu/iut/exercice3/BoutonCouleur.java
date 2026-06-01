@@ -21,40 +21,41 @@ public class BoutonCouleur extends Button {
   //
   // 1. Déclarer si nécessaire, un champ IntegerProperty nbClics (SimpleIntegerProperty, valeur 0).
   //
+  private final IntegerProperty nbClics = new SimpleIntegerProperty(0);
+
   // 2. Déclarer si nécessaire, un champ String couleur (la couleur CSS du bouton, ex: "red").
   //
+  private String couleur;
+
   // 3. Implémenter le constructeur BoutonCouleur(String texte, String couleur) :
   //    - appeler super(texte)
   //    - stocker la couleur
   //    - ajouter un handler setOnAction qui incrémente nbClics de 1
   //
-  // 4. Implémenter les accesseurs JavaBeans :
-  //    - int getNbClics()
-  //    - IntegerProperty nbClicsProperty()
-  //    - String getCouleur()
+  public BoutonCouleur(String texte, String couleur) {
+    super(texte);
+    this.couleur = couleur;
 
-  private final IntegerProperty nbClics = new SimpleIntegerProperty(0);
-  private String couleur = "";
+    setOnAction(e -> nbClics.set(nbClics.get() + 1));
+  }
 
   /** Constructeur par défaut (nécessaire pour la version étudiante). */
   public BoutonCouleur() {
     super();
   }
 
-  /** Crée un bouton de couleur avec le texte et la couleur CSS donnés. */
-  public BoutonCouleur(String texte, String couleur) {
-    super(texte);
-    this.couleur = couleur;
-  }
-
+  // 4. Implémenter les accesseurs JavaBeans :
+  //    - int getNbClics()
   public int getNbClics() {
     return nbClics.get();
   }
 
+  //    - IntegerProperty nbClicsProperty()
   public IntegerProperty nbClicsProperty() {
     return nbClics;
   }
 
+  //    - String getCouleur()
   public String getCouleur() {
     return couleur;
   }
