@@ -7,7 +7,6 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.stage.Stage;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -141,7 +140,6 @@ class PaletteReactiveTest {
         .contains("red");
   }
 
-  @Disabled("Retire cette annotation pour activer le test")
   @Test
   @Order(11)
   void cliquerVertMetLaZoneEnVert(FxRobot robot) {
@@ -155,7 +153,6 @@ class PaletteReactiveTest {
 
   // --- Étape 7 : le label se met à jour via binding ---
 
-  @Disabled("Retire cette annotation pour activer le test")
   @Test
   @Order(12)
   void cliquerIncrementeLeCompteur(FxRobot robot) {
@@ -168,7 +165,6 @@ class PaletteReactiveTest {
         .contains("Rouge: 2");
   }
 
-  @Disabled("Retire cette annotation pour activer le test")
   @Test
   @Order(13)
   void leTexteBasculeDeBienvenueAuxCompteurs(FxRobot robot) {
@@ -184,7 +180,6 @@ class PaletteReactiveTest {
 
   // --- Étape 8 : compteurs indépendants ---
 
-  @Disabled("Retire cette annotation pour activer le test")
   @Test
   @Order(14)
   void lesCompteursSontIndependants(FxRobot robot) {
@@ -202,7 +197,6 @@ class PaletteReactiveTest {
 
   // --- Étape 9 : vérifier que le binding fonctionne (pas de setText()) ---
 
-  @Disabled("Retire cette annotation pour activer le test")
   @Test
   @Order(15)
   void leLabelEstLieParBinding(FxRobot robot) {
