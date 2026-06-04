@@ -17,7 +17,10 @@ import javafx.scene.control.Button;
  */
 public class BoutonCouleur extends Button {
 
+  // 1. Déclarer si nécessaire, un champ IntegerProperty nbClics (SimpleIntegerProperty, valeur 0).
   private final IntegerProperty nbClics = new SimpleIntegerProperty(0);
+
+  // 2. Déclarer si nécessaire, un champ String couleur (la couleur CSS du bouton, ex: "red").
   private final String couleur;
 
   /** Constructeur par défaut (nécessaire pour la version étudiante). */
@@ -28,6 +31,10 @@ public class BoutonCouleur extends Button {
     setStyle("-fx-background-color: " + couleur + ";");
   }
 
+  // 3. Implémenter le constructeur BoutonCouleur(String texte, String couleur) :
+  //    - appeler super(texte)
+  //    - stocker la couleur
+  //    - ajouter un handler setOnAction qui incrémente nbClics de 1
   /** Crée un bouton de couleur avec le texte et la couleur CSS donnés. */
   public BoutonCouleur(String texte, String couleur) {
     super(texte);
@@ -36,14 +43,18 @@ public class BoutonCouleur extends Button {
     setStyle("-fx-background-color: " + couleur + ";");
   }
 
+  // 4. Implémenter les accesseurs JavaBeans :
+  //    - int getNbClics()
   public int getNbClics() {
     return nbClics.get();
   }
 
+  //    - IntegerProperty nbClicsProperty()
   public IntegerProperty nbClicsProperty() {
     return nbClics;
   }
 
+  //    - String getCouleur()
   public String getCouleur() {
     return couleur;
   }

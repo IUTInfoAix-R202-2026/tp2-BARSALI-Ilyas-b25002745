@@ -62,31 +62,18 @@ public class PaletteReactive extends Application {
       Label labelCompteurs) {
 
     // 1. ChangeListener sur chaque bouton pour changer la couleur de la zone
-    btnRouge
-        .nbClicsProperty()
-        .addListener(
-            (obs, oldVal, newVal) -> {
-              zone.setStyle("-fx-background-color: " + btnRouge.getCouleur() + ";");
-            });
-    btnVert
-        .nbClicsProperty()
-        .addListener(
-            (obs, oldVal, newVal) -> {
-              zone.setStyle("-fx-background-color: " + btnVert.getCouleur() + ";");
-            });
-    btnBleu
-        .nbClicsProperty()
-        .addListener(
-            (obs, oldVal, newVal) -> {
-              zone.setStyle("-fx-background-color: " + btnBleu.getCouleur() + ";");
-            });
+    btnRouge.nbClicsProperty().addListener(
+        (obs, oldVal, newVal) -> zone.setStyle("-fx-background-color: " + btnRouge.getCouleur() + ";"));
+    btnVert.nbClicsProperty().addListener(
+        (obs, oldVal, newVal) -> zone.setStyle("-fx-background-color: " + btnVert.getCouleur() + ";"));
+    btnBleu.nbClicsProperty().addListener(
+        (obs, oldVal, newVal) -> zone.setStyle("-fx-background-color: " + btnBleu.getCouleur() + ";"));
 
     // 2. StringExpression avec Bindings.concat()
-    StringExpression texteCompteurs =
-        Bindings.concat(
-            "Rouge: ", btnRouge.nbClicsProperty().asString(),
-            "  Vert: ", btnVert.nbClicsProperty().asString(),
-            "  Bleu: ", btnBleu.nbClicsProperty().asString());
+    StringExpression texteCompteurs = Bindings.concat(
+        "Rouge: ", btnRouge.nbClicsProperty().asString(),
+        "  Vert: ", btnVert.nbClicsProperty().asString(),
+        "  Bleu: ", btnBleu.nbClicsProperty().asString());
 
     // 3. Somme des trois compteurs pour le Bindings.when()
     javafx.beans.binding.NumberBinding total =
