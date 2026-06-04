@@ -77,11 +77,21 @@ public class PaletteReactive extends Application {
             (obs, oldVal, newVal) ->
                 zone.setStyle("-fx-background-color: " + btnBleu.getCouleur() + ";"));
 
-    StringExpression texte =
+    StringExpression compteurs =
         Bindings.concat(
             "Rouge: ", btnRouge.nbClicsProperty().asString(),
             "  Vert: ", btnVert.nbClicsProperty().asString(),
             "  Bleu: ", btnBleu.nbClicsProperty().asString());
+
+    StringExpression texte =
+        Bindings.when(
+                btnRouge
+                    .nbClicsProperty()
+                    .greaterThan(0)
+                    .or(btnVert.nbClicsProperty().greaterThan(0))
+                    .or(btnBleu.nbClicsProperty().greaterThan(0)))
+            .then(compteurs)
+            .otherwise("Bienvenue !");
 
     labelCompteurs.textProperty().bind(texte);
   }

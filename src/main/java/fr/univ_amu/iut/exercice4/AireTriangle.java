@@ -26,8 +26,6 @@ public class AireTriangle {
   }
 
   private void createBinding() {
-    // Calcul du déterminant avec l'API fluente JavaFX
-    // Formule : x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2)
     NumberBinding determinant =
         x1.multiply(y2)
             .subtract(x1.multiply(y3))
@@ -36,24 +34,18 @@ public class AireTriangle {
             .add(x3.multiply(y1))
             .subtract(x3.multiply(y2));
 
-    // Lier area à la valeur absolue du déterminant divisé par 2
-    // Bindings.when() remplace Math.abs() de façon réactive
     area.bind(
         Bindings.when(determinant.greaterThanOrEqualTo(0))
             .then(determinant.divide(2.0))
             .otherwise(determinant.negate().divide(2.0)));
 
-    // StringExpression pour afficher les coordonnées et l'aire formatées
     output =
-        Bindings.format("P1(%s,%s) P2(%s,%s) P3(%s,%s) => aire = %s", x1, y1, x2, y2, x3, y3, area);
+        Bindings.format("P1(%d,%d) P2(%d,%d) P3(%d,%d) => aire = %s", x1, y1, x2, y2, x3, y3, area);
   }
 
   void printResult() {
-    // Affiche la StringExpression output dans la console
     System.out.println(output.get());
   }
-
-  // --- Setters de points (raccourcis pour définir x et y en même temps) ---
 
   public void setP1(int x, int y) {
     x1.set(x);
@@ -70,91 +62,77 @@ public class AireTriangle {
     y3.set(y);
   }
 
-  // --- Convention JavaBeans pour x1 ---
-
   public int getX1() {
     return x1.get();
   }
 
-  public void setX1(int value) {
-    x1.set(value);
+  public void setX1(int v) {
+    x1.set(v);
   }
 
   public IntegerProperty x1Property() {
     return x1;
   }
 
-  // --- Convention JavaBeans pour y1 ---
-
   public int getY1() {
     return y1.get();
   }
 
-  public void setY1(int value) {
-    y1.set(value);
+  public void setY1(int v) {
+    y1.set(v);
   }
 
   public IntegerProperty y1Property() {
     return y1;
   }
 
-  // --- Convention JavaBeans pour x2 ---
-
   public int getX2() {
     return x2.get();
   }
 
-  public void setX2(int value) {
-    x2.set(value);
+  public void setX2(int v) {
+    x2.set(v);
   }
 
   public IntegerProperty x2Property() {
     return x2;
   }
 
-  // --- Convention JavaBeans pour y2 ---
-
   public int getY2() {
     return y2.get();
   }
 
-  public void setY2(int value) {
-    y2.set(value);
+  public void setY2(int v) {
+    y2.set(v);
   }
 
   public IntegerProperty y2Property() {
     return y2;
   }
 
-  // --- Convention JavaBeans pour x3 ---
-
   public int getX3() {
     return x3.get();
   }
 
-  public void setX3(int value) {
-    x3.set(value);
+  public void setX3(int v) {
+    x3.set(v);
   }
 
   public IntegerProperty x3Property() {
     return x3;
   }
 
-  // --- Convention JavaBeans pour y3 ---
-
   public int getY3() {
     return y3.get();
   }
 
-  public void setY3(int value) {
-    y3.set(value);
+  public void setY3(int v) {
+    y3.set(v);
   }
 
   public IntegerProperty y3Property() {
     return y3;
   }
-
-  // --- Accesseur aire (lecture seule depuis l'extérieur) ---
 
   public double getArea() {
     return area.get();
@@ -166,16 +144,14 @@ public class AireTriangle {
 
   public static void main(String[] args) {
     AireTriangle t = new AireTriangle();
-    t.printResult(); // P1(0,0) P2(0,0) P3(0,0) => aire = 0.0
-
+    t.printResult();
     t.setP1(0, 1);
     t.setP2(6, 0);
     t.setP3(4, 3);
-    t.printResult(); // P1(0,1) P2(6,0) P3(4,3) => aire = 9.0
-
+    t.printResult();
     t.setP1(1, 0);
     t.setP2(2, 2);
     t.setP3(0, 1);
-    t.printResult(); // P1(1,0) P2(2,2) P3(0,1) => aire = 1.5
+    t.printResult();
   }
 }
