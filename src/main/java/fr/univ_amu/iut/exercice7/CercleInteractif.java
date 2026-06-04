@@ -1,6 +1,8 @@
 package fr.univ_amu.iut.exercice7;
 
 import javafx.application.Application;
+import javafx.beans.binding.Bindings;
+import javafx.scene.Scene;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
@@ -46,10 +48,16 @@ public class CercleInteractif extends Application {
     // TODO exercice 7 : assembler l'interface et créer les bindings.
     //
     // 1. Appeler ajouterPanneau() pour configurer le panneau avec le cercle.
+    ajouterPanneau();
     // 2. Appeler ajouterSlider() pour configurer le slider en haut.
+    ajouterSlider();
     // 3. Appeler ajouterTextField() pour ajouter le champ de saisie en bas.
+    ajouterTextField();
     // 4. Appeler creerBindings() pour lier les trois contrôles.
+    creerBindings();
     // 5. Créer la Scene, l'attacher au Stage, afficher.
+    primaryStage.setScene(new Scene(root, 500, 500));
+    primaryStage.show();
   }
 
   void ajouterPanneau() {
@@ -60,6 +68,11 @@ public class CercleInteractif extends Application {
     // panneauCercle.setId("panneau")
     // cercle.setId("cercle")
     // root.setCenter(panneauCercle)
+    panneauCercle.getChildren().add(cercle);
+    panneauCercle.setPrefSize(500, 500);
+    panneauCercle.setId("panneau");
+    cercle.setId("cercle");
+    root.setCenter(panneauCercle);
   }
 
   void ajouterSlider() {
@@ -68,6 +81,10 @@ public class CercleInteractif extends Application {
     // slider.setMin(0), slider.setMax(250)
     // slider.setId("slider")
     // root.setTop(slider)
+    slider.setMin(0);
+    slider.setMax(250);
+    slider.setId("slider");
+    root.setTop(slider);
   }
 
   void ajouterTextField() {
@@ -75,6 +92,9 @@ public class CercleInteractif extends Application {
     //
     // Le TextFormatter filtre la saisie pour n'accepter que des nombres.
     // Ce code est fourni - ne pas modifier.
+    textField.setId("rayon");
+    textField.setMaxWidth(70);
+    root.setBottom(textField);
   }
 
   void creerBindings() {
@@ -83,16 +103,21 @@ public class CercleInteractif extends Application {
     // 1. Centrer le cercle dans le panneau (unidirectionnel) :
     //    cercle.centerXProperty().bind(panneauCercle.widthProperty().divide(2))
     //    cercle.centerYProperty().bind(panneauCercle.heightProperty().divide(2))
-    //
+    cercle.centerXProperty().bind(panneauCercle.widthProperty().divide(2));
+    cercle.centerYProperty().bind(panneauCercle.heightProperty().divide(2));
+
     // 2. Lier le rayon du cercle au slider (bidirectionnel) :
     //    cercle.radiusProperty().bindBidirectional(slider.valueProperty())
     //
+    cercle.radiusProperty().bindBidirectional(slider.valueProperty());
     // 3. Lier le slider au TextField via NumberStringConverter :
     //    Bindings.bindBidirectional(textField.textProperty(),
     //        slider.valueProperty(), new NumberStringConverter())
-    //
+    Bindings.bindBidirectional(
+        textField.textProperty(), slider.valueProperty(), new NumberStringConverter());
     // 4. Initialiser le rayon à 150 :
     //    slider.setValue(150)
+    slider.setValue(150);
   }
 
   public static void main(String[] args) {
